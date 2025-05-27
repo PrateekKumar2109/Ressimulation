@@ -1,0 +1,10 @@
+numpy
+pandas
+#pydeck
+openpyxl
+matplotlib
+seaborn
+pyxlsb
+plotly
+streamlit
+pip
