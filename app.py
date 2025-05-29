@@ -44,9 +44,9 @@ def main():
         
         # Physical dimensions
         st.subheader("Physical Dimensions")
-        length_x = st.number_input("Length X (m)", value=1000.0)
-        length_y = st.number_input("Length Y (m)", value=1000.0)
-        length_z = st.number_input("Length Z (m)", value=50.0)
+        length_x = st.number_input("Length X (m)", value=100.0)
+        length_y = st.number_input("Length Y (m)", value=100.0)
+        length_z = st.number_input("Length Z (m)", value=10.0)
         
         # Rock properties - Changed porosity to text input box
         st.subheader("Rock Properties")
