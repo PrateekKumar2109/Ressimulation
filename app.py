@@ -32,11 +32,15 @@ def main():
     with st.sidebar:
         st.header("Simulation Parameters")
         
-        # Grid dimensions
+        # Grid dimensions - Changed to text input boxes
         st.subheader("Grid Dimensions")
-        nx = st.slider("Grid cells in X direction", 5, 50, 20)
-        ny = st.slider("Grid cells in Y direction", 5, 50, 20)
-        nz = st.slider("Grid cells in Z direction", 3, 20, 5)
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            nx = st.number_input("Grid X", min_value=5, max_value=50, value=20, step=1)
+        with col2:
+            ny = st.number_input("Grid Y", min_value=5, max_value=50, value=20, step=1)
+        with col3:
+            nz = st.number_input("Grid Z", min_value=3, max_value=20, value=5, step=1)
         
         # Physical dimensions
         st.subheader("Physical Dimensions")
@@ -44,9 +48,9 @@ def main():
         length_y = st.number_input("Length Y (m)", value=1000.0)
         length_z = st.number_input("Length Z (m)", value=50.0)
         
-        # Rock properties
+        # Rock properties - Changed porosity to text input box
         st.subheader("Rock Properties")
-        porosity = st.slider("Porosity", 0.1, 0.4, 0.2)
+        porosity = st.number_input("Porosity", min_value=0.1, max_value=0.4, value=0.2, step=0.01, format="%.3f")
         permeability_x = st.number_input("Permeability X (mD)", value=100.0)
         permeability_y = st.number_input("Permeability Y (mD)", value=100.0)
         permeability_z = st.number_input("Permeability Z (mD)", value=10.0)
@@ -74,7 +78,7 @@ def main():
         if st.button("Initialize Simulation", type="primary"):
             with st.spinner("Initializing reservoir simulation..."):
                 st.session_state.simulator = ReservoirSimulator(
-                    nx=nx, ny=ny, nz=nz,
+                    nx=int(nx), ny=int(ny), nz=int(nz),
                     length_x=length_x, length_y=length_y, length_z=length_z,
                     porosity=porosity,
                     permeability_x=permeability_x,
@@ -203,14 +207,14 @@ def main():
             
             with tab1:
                 st.markdown("#### Pressure Distribution")
-                layer_select = st.selectbox("Select Layer", range(nz), key="pressure_layer")
+                layer_select = st.selectbox("Select Layer", range(int(nz)), key="pressure_layer")
                 fig_pressure = visualizer.plot_pressure_field(layer=layer_select)
                 st.plotly_chart(fig_pressure, use_container_width=True)
             
             with tab2:
                 st.markdown("#### Saturation Distribution")
                 phase_select = st.selectbox("Select Phase", ["Oil", "Gas", "Water"], key="saturation_phase")
-                layer_select_sat = st.selectbox("Select Layer", range(nz), key="saturation_layer")
+                layer_select_sat = st.selectbox("Select Layer", range(int(nz)), key="saturation_layer")
                 fig_saturation = visualizer.plot_saturation_field(phase_select.lower(), layer=layer_select_sat)
                 st.plotly_chart(fig_saturation, use_container_width=True)
             
@@ -247,8 +251,8 @@ def main():
             
             with col1:
                 st.markdown("#### Grid Information")
-                st.write(f"Grid dimensions: {nx} × {ny} × {nz}")
-                st.write(f"Total cells: {nx * ny * nz:,}")
+                st.write(f"Grid dimensions: {int(nx)} × {int(ny)} × {int(nz)}")
+                st.write(f"Total cells: {int(nx) * int(ny) * int(nz):,}")
                 st.write(f"Physical dimensions: {length_x} × {length_y} × {length_z} m")
                 st.write(f"Cell size: {length_x/nx:.1f} × {length_y/ny:.1f} × {length_z/nz:.1f} m")
             
@@ -262,4 +266,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
