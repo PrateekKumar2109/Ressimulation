@@ -218,8 +218,8 @@ def main():
                     with col1:
                         icon = "🔴" if well['type'] == 'producer' else "🔵"
                         st.markdown(f"{icon} **{well['name']}** ({well['type']})")
-                        st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;Location: ({well['i']}, {well['j']}, {well['k']})")
-                        st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;Rate: {abs(well['rate']):.0f} STB/day")
+                        st.markdown(f"    Location: ({well['i']}, {well['j']}, {well['k']})")
+                        st.markdown(f"    Rate: {abs(well['rate']):.0f} STB/day")
                     with col2:
                         if st.button("🗑️", key=f"remove_well_{i}", help="Remove well"):
                             st.session_state.selected_wells.pop(i)
@@ -244,11 +244,23 @@ def main():
                             initial_water_saturation=water_saturation
                         )
                         
-                        # Add wells from selected locations
+                        # Convert and assign wells directly with proper unit conversion
+                        converted_wells = []
                         for well in st.session_state.selected_wells:
-                            st.session_state.simulator.well_model.add_well(well)
+                            converted_well = {
+                                'name': well['name'],
+                                'type': well['type'],
+                                'i': well['i'],
+                                'j': well['j'],
+                                'k': well['k'],
+                                'rate': well['rate'] * 0.159 if well['type'] == 'injector' else well['rate'] * 0.159  # Convert STB/day to m³/day
+                            }
+                            converted_wells.append(converted_well)
                         
-                        st.success(f"Simulation initialized with {len(st.session_state.selected_wells)} wells!")
+                        # Directly assign wells to simulator.wells
+                        st.session_state.simulator.wells = converted_wells
+                        
+                        st.success(f"Simulation initialized with {len(converted_wells)} wells!")
                     except Exception as e:
                         st.error(f"Error initializing simulation: {str(e)}")
     
@@ -334,7 +346,7 @@ def main():
                 st.warning("Add wells using the sidebar controls, then initialize the simulation.")
     
     else:
-        # Simulation controls and results (same as original code)
+        # Simulation controls and results
         st.subheader("🎮 Simulation Controls")
         
         col1, col2, col3, col4 = st.columns(4)
@@ -453,11 +465,11 @@ def main():
             
             with col2:
                 st.markdown("#### Well Information")
-                if hasattr(st.session_state.simulator, 'well_model') and st.session_state.simulator.well_model.wells:
-                    for well in st.session_state.simulator.well_model.wells:
+                if hasattr(st.session_state.simulator, 'wells') and st.session_state.simulator.wells:
+                    for well in st.session_state.simulator.wells:
                         st.write(f"**{well['name']}** ({well['type']})")
                         st.write(f"Location: ({well['i']}, {well['j']}, {well['k']})")
-                        st.write(f"Rate: {well['rate']:.1f} STB/day")
+                        st.write(f"Rate: {abs(well['rate']):.1f} m³/day")
                         st.write("---")
                 else:
                     st.write("No wells configured")
