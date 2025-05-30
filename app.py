@@ -5,13 +5,14 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 import time
+import uuid
 
 from reservoir_simulator import ReservoirSimulator
 from visualization import ReservoirVisualizer
 
-def create_interactive_grid(nx, ny, nz, selected_wells=None):
+def create_interactive_grid(nx, ny, nz, selected_wells=None, selected_cell=None):
     """
-    Create an interactive grid for well placement
+    Create an interactive grid for well placement with enhanced selection visualization
     """
     if selected_wells is None:
         selected_wells = []
@@ -38,8 +39,26 @@ def create_interactive_grid(nx, ny, nz, selected_wells=None):
         name='Available Cells',
         hovertemplate='Grid Cell: (%{x}, %{y})<br>Click to select<extra></extra>',
         showlegend=True,
-        customdata=[(i, j) for i, j in zip(X.flatten(), Y.flatten())]  # Store grid coordinates
+        customdata=[(i, j) for i, j in zip(X.flatten(), Y.flatten())]
     ))
+    
+    # Highlight selected cell
+    if selected_cell:
+        x, y = selected_cell
+        fig.add_trace(go.Scatter(
+            x=[x],
+            y=[y],
+            mode='markers',
+            marker=dict(
+                size=25,
+                color='yellow',
+                symbol='square',
+                line=dict(width=3, color='black')
+            ),
+            name='Selected Cell',
+            hovertemplate=f'Selected Cell: ({x}, {y})<extra></extra>',
+            showlegend=True
+        ))
     
     # Add existing wells
     for well in selected_wells:
@@ -163,16 +182,16 @@ def main():
         # Button to create grid
         if st.button("🏗️ Create Grid", type="secondary"):
             st.session_state.grid_initialized = True
-            st.session_state.selected_wells = []  # Reset wells when grid changes
+            st.session_state.selected_wells = []
             st.session_state.selected_cell = None
             st.success("Grid created! Now you can place wells.")
             st.rerun()
         
-        # Well management section (only show if grid is initialized)
+        # Well management section
         if st.session_state.grid_initialized:
             st.subheader("🎯 Well Placement")
             
-            # Well placement controls for interactive selection
+            # Well placement controls
             st.markdown("**Add Well from Grid Selection**")
             well_name = st.text_input("Well Name", value=f"WELL_{len(st.session_state.selected_wells)+1}", key="grid_well_name")
             well_type = st.selectbox("Well Type", ["producer", "injector"], key="grid_well_type")
@@ -185,7 +204,6 @@ def main():
             
             if st.session_state.selected_cell:
                 x, y = st.session_state.selected_cell
-                st.info(f"Selected cell: ({x}, {y}, {well_z})")
                 if st.button("➕ Add Well at Selected Cell", type="primary", key="add_grid_well"):
                     # Check if location is already occupied
                     occupied = any(well['i'] == x and well['j'] == y and well['k'] == well_z 
@@ -200,16 +218,17 @@ def main():
                             'k': int(well_z),
                             'rate': well_rate,
                             'radius': 0.1,
-                            'skin': 0.0
+                            'skin': 0.0,
+                            'id': str(uuid.uuid4())
                         }
                         st.session_state.selected_wells.append(new_well)
-                        st.session_state.selected_cell = None  # Reset selection
+                        st.session_state.selected_cell = None
                         st.success(f"Added {well_name} at ({x}, {y}, {well_z})")
                         st.rerun()
                     else:
                         st.error("Location already occupied by another well!")
             
-            # Manual coordinate input as backup
+            # Manual coordinate input
             with st.expander("Manual Well Placement", expanded=False):
                 col1, col2 = st.columns(2)
                 with col1:
@@ -227,7 +246,6 @@ def main():
                     manual_well_rate = st.number_input("Injection Rate (STB/day)", value=300.0, min_value=0.0, key="manual_inj_rate")
                 
                 if st.button("➕ Add Well at Coordinates", type="primary", key="add_manual_well"):
-                    # Check if location is already occupied
                     occupied = any(well['i'] == manual_x and well['j'] == manual_y and well['k'] == manual_z 
                                  for well in st.session_state.selected_wells)
                     
@@ -240,7 +258,8 @@ def main():
                             'k': int(manual_z),
                             'rate': manual_well_rate,
                             'radius': 0.1,
-                            'skin': 0.0
+                            'skin': 0.0,
+                            'id': str(uuid.uuid4())
                         }
                         st.session_state.selected_wells.append(new_well)
                         st.success(f"Added {manual_well_name} at ({manual_x}, {manual_y}, {manual_z})")
@@ -265,7 +284,7 @@ def main():
                 
                 st.markdown("---")
         
-        # Initialize simulation button (only show if wells are placed)
+        # Initialize simulation button
         if st.session_state.selected_wells:
             if st.button("🚀 Initialize Simulation", type="primary"):
                 with st.spinner("Initializing reservoir simulation..."):
@@ -282,7 +301,6 @@ def main():
                             initial_water_saturation=water_saturation
                         )
                         
-                        # Convert and assign wells directly with proper unit conversion
                         converted_wells = []
                         for well in st.session_state.selected_wells:
                             converted_well = {
@@ -291,13 +309,12 @@ def main():
                                 'i': well['i'],
                                 'j': well['j'],
                                 'k': well['k'],
-                                'rate': well['rate'] * 0.159 if well['type'] == 'injector' else well['rate'] * 0.159  # Convert STB/day to m³/day
+                                'rate': well['rate'] * 0.159,
+                                'id': well['id']
                             }
                             converted_wells.append(converted_well)
                         
-                        # Directly assign wells to simulator.wells
                         st.session_state.simulator.wells = converted_wells
-                        
                         st.success(f"Simulation initialized with {len(converted_wells)} wells!")
                     except Exception as e:
                         st.error(f"Error initializing simulation: {str(e)}")
@@ -306,9 +323,8 @@ def main():
     if not st.session_state.grid_initialized:
         st.info("👆 Please configure grid parameters in the sidebar and click **'Create Grid'** to begin.")
         
-        # Display equations and theory
+        # Display equations
         st.subheader("Black Oil Reservoir Simulation Theory")
-        
         col1, col2 = st.columns(2)
         
         with col1:
@@ -317,12 +333,10 @@ def main():
             \frac{\partial}{\partial t}\left(\frac{\phi S_o B_o}{B_{oi}}\right) + \nabla \cdot \left(\frac{\rho_o \vec{v}_o}{B_o}\right) = q_o
             ''')
             st.markdown("**Oil Conservation Equation**")
-            
             st.latex(r'''
             \frac{\partial}{\partial t}\left(\frac{\phi S_g B_g}{B_{gi}}\right) + \nabla \cdot \left(\frac{\rho_g \vec{v}_g}{B_g}\right) = q_g
             ''')
             st.markdown("**Gas Conservation Equation**")
-            
             st.latex(r'''
             \frac{\partial}{\partial t}\left(\frac{\phi S_w B_w}{B_{wi}}\right) + \nabla \cdot \left(\frac{\rho_w \vec{v}_w}{B_w}\right) = q_w
             ''')
@@ -334,11 +348,8 @@ def main():
             \vec{v}_\alpha = -\frac{k k_{r\alpha}}{\mu_\alpha}\left(\nabla P_\alpha - \rho_\alpha g \nabla D\right)
             ''')
             st.markdown("**Phase Velocity (α = oil, gas, water)**")
-            
-            st.markdown("#### Constraints")
             st.latex(r'''S_o + S_g + S_w = 1''')
             st.markdown("**Saturation Constraint**")
-            
             st.latex(r'''P_g = P_o + P_{cog}''')
             st.latex(r'''P_o = P_w + P_{cow}''')
             st.markdown("**Capillary Pressure Relations**")
@@ -349,11 +360,18 @@ def main():
         
         with col1:
             st.subheader("🗺️ Reservoir Grid Layout")
-            st.markdown("**Instructions:** Click on a grid cell to select a location, then use the sidebar to specify well details and add it. Alternatively, use the manual well placement controls.")
+            st.markdown("**Instructions:** Click a grid cell to select a location. The selected cell will be highlighted in yellow. Then, use the sidebar to specify well details and add it.")
             
             # Create and display interactive grid
-            grid_fig = create_interactive_grid(int(nx), int(ny), int(nz), st.session_state.selected_wells)
+            grid_fig = create_interactive_grid(int(nx), int(ny), int(nz), 
+                                            st.session_state.selected_wells, 
+                                            st.session_state.selected_cell)
             grid_event = st.plotly_chart(grid_fig, use_container_width=True, key="reservoir_grid")
+            
+            # Display selected cell coordinates
+            if st.session_state.selected_cell:
+                x, y = st.session_state.selected_cell
+                st.info(f"**Selected Cell:** ({x}, {y}, {well_z})")
             
             # Handle click events
             if grid_event:
@@ -385,7 +403,8 @@ def main():
             st.markdown("#### 🎯 Legend")
             st.markdown("""
             - 🟦 **Blue Squares**: Available grid cells
-            - 🔴 **Red Circles**: Production wells  
+            - 🟨 **Yellow Square**: Selected cell
+            - 🔴 **Red Circles**: Production wells
             - 🔵 **Blue Diamonds**: Injection wells
             """)
             
@@ -399,7 +418,6 @@ def main():
     else:
         # Simulation controls and results
         st.subheader("🎮 Simulation Controls")
-        
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
@@ -421,15 +439,12 @@ def main():
                                       value=st.session_state.simulator.current_time, 
                                       disabled=True)
         
-        # Run simulation if requested
         if st.session_state.is_running:
             progress_bar = st.progress(0)
             status_text = st.empty()
             
-            # Run simulation steps
             max_steps = int(total_time / initial_dt)
-            
-            for step in range(min(10, max_steps)):  # Run 10 steps at a time for responsiveness
+            for step in range(min(10, max_steps)):
                 if not st.session_state.is_running:
                     break
                 
@@ -443,24 +458,20 @@ def main():
                         st.session_state.is_running = False
                         st.success("Simulation completed!")
                         break
-                        
                 except Exception as e:
                     st.error(f"Simulation error: {str(e)}")
                     st.session_state.is_running = False
                     break
             
             if st.session_state.is_running:
-                time.sleep(0.1)  # Small delay for UI responsiveness
+                time.sleep(0.1)
                 st.rerun()
         
         # Display simulation results
         if st.session_state.simulator.current_time > 0:
             st.subheader("📈 Simulation Results")
-            
-            # Create visualizer
             visualizer = ReservoirVisualizer(st.session_state.simulator)
             
-            # Tabs for different visualizations
             tab1, tab2, tab3, tab4 = st.tabs(["Pressure Field", "Saturation Distribution", "Production Data", "Material Balance"])
             
             with tab1:
@@ -490,10 +501,8 @@ def main():
                     fig_material = visualizer.plot_material_balance()
                     st.plotly_chart(fig_material, use_container_width=True)
                     
-                    # Display current material balance
                     current_balance = st.session_state.simulator.material_balance_history[-1]
                     col1, col2, col3 = st.columns(3)
-                    
                     with col1:
                         st.metric("Oil in Place", f"{current_balance['oil_in_place']:.0f}", "STB")
                     with col2:
@@ -506,7 +515,6 @@ def main():
         # Display grid and well information
         with st.expander("📋 Grid and Well Information"):
             col1, col2 = st.columns(2)
-            
             with col1:
                 st.markdown("#### Grid Information")
                 st.write(f"Grid dimensions: {int(nx)} × {int(ny)} × {int(nz)}")
