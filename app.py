@@ -8,26 +8,45 @@ import time
 import cohere
 import os
 
-from reservoir_simulator import ReservoirSimulator
-from visualization import ReservoirVisualizer
-
-# Initialize Cohere client
-cohere_api_key = "vGCEakgncpouo9Nz0rsJ0Bq7XRvwNgTCZMKSohlg"
-if not cohere_api_key:
-    st.error("Cohere API key not found. Please set COHERE_API_KEY in Streamlit secrets or environment variables.")
-    st.stop()
-co = cohere.Client(cohere_api_key)
+# Initialize Cohere client with proper error handling
+def initialize_cohere():
+    """Initialize Cohere client with proper error handling"""
+    try:
+        # Try to get API key from Streamlit secrets first, then environment variables
+        cohere_api_key = "vGCEakgncpouo9Nz0rsJ0Bq7XRvwNgTCZMKSohlg"
+        
+        if not cohere_api_key:
+            st.error("❌ Cohere API key not found. Please set COHERE_API_KEY in Streamlit secrets or environment variables.")
+            return None
+        
+        co = cohere.Client(cohere_api_key)
+        
+        # Test the connection
+        co.generate(
+            model="command",
+            prompt="Test connection",
+            max_tokens=5
+        )
+        
+        st.success("✅ Cohere API connected successfully!")
+        return co
+        
+    except Exception as e:
+        st.error(f"❌ Failed to initialize Cohere: {str(e)}")
+        return None
 
 # Context about the web app for the assistant
 APP_CONTEXT = """
 This is a 3D Black Oil Reservoir Simulation web app built with Streamlit. It simulates multiphase flow dynamics in a reservoir, allowing users to configure parameters such as grid dimensions, physical dimensions, rock properties (porosity, permeability), fluid properties (initial pressure, oil and water saturation), and simulation controls (total time, time steps). Users can also set up wells (producers and injectors) with specific rates. The app displays governing equations, Darcy's Law, and constraints for black oil simulation. After initializing and running the simulation, it visualizes results like pressure fields, saturation distributions, production history, and material balance using Plotly charts. The app includes interactive controls to run, pause, or reset the simulation.
 """
 
-def get_assistant_response(user_input):
+def get_assistant_response(co, user_input):
     """Generate a response using Cohere's command model, including app context."""
+    if co is None:
+        return "Cohere client not initialized. Please check your API key."
+    
     prompt = f"{APP_CONTEXT}\n\nUser question: {user_input}\n\nAnswer:"
     try:
-        # Use 'command' model for conversational Q&A
         response = co.generate(
             model="command",
             prompt=prompt,
@@ -41,11 +60,13 @@ def get_assistant_response(user_input):
     except Exception as e:
         return f"Error generating response: {str(e)}"
 
-def summarize_text(text):
-    """Summarize text using Cohere's summarize-xlarge model."""
+def summarize_text(co, text):
+    """Summarize text using Cohere's summarize model."""
+    if co is None:
+        return "Cohere client not initialized. Please check your API key."
+    
     try:
         response = co.summarize(
-            model="summarize-xlarge",
             text=text,
             length="medium",
             format="paragraph",
@@ -54,6 +75,15 @@ def summarize_text(text):
         return response.summary
     except Exception as e:
         return f"Error summarizing text: {str(e)}"
+
+# Import your original reservoir simulator and visualizer modules
+try:
+    from reservoir_simulator import ReservoirSimulator
+    from visualization import ReservoirVisualizer
+    MODULES_AVAILABLE = True
+except ImportError:
+    st.error("❌ reservoir_simulator.py and/or visualization.py modules not found. Please ensure these files are in your project directory.")
+    MODULES_AVAILABLE = False
 
 def main():
     st.set_page_config(
@@ -66,6 +96,10 @@ def main():
     st.title("🛢️ 3D Black Oil Reservoir Simulation")
     st.markdown("### Advanced Multiphase Flow Dynamics Simulator")
     
+    # Initialize Cohere client
+    if 'cohere_client' not in st.session_state:
+        st.session_state.cohere_client = initialize_cohere()
+    
     # Initialize session state
     if 'simulator' not in st.session_state:
         st.session_state.simulator = None
@@ -77,7 +111,7 @@ def main():
         st.session_state.assistant_history = []
     
     # Tabs for Simulation and Assistant
-    tab1, tab2 = st.tabs(["Simulation", "Assistant 🧠"])
+    tab1, tab2 = st.tabs(["🔧 Simulation", "🧠 AI Assistant"])
     
     with tab1:
         # Sidebar for parameters
@@ -128,28 +162,31 @@ def main():
             
             # Initialize simulation button
             if st.button("Initialize Simulation", type="primary"):
-                with st.spinner("Initializing reservoir simulation..."):
-                    st.session_state.simulator = ReservoirSimulator(
-                        nx=int(nx), ny=int(ny), nz=int(nz),
-                        length_x=length_x, length_y=length_y, length_z=length_z,
-                        porosity=porosity,
-                        permeability_x=permeability_x,
-                        permeability_y=permeability_y,
-                        permeability_z=permeability_z,
-                        initial_pressure=initial_pressure,
-                        initial_oil_saturation=oil_saturation,
-                        initial_water_saturation=water_saturation
-                    )
-                    
-                    # Add wells
-                    st.session_state.simulator.add_wells(
-                        num_producers=num_producers,
-                        num_injectors=num_injectors,
-                        production_rate=production_rate,
-                        injection_rate=injection_rate
-                    )
-                    
-                    st.success("Simulation initialized successfully!")
+                if not MODULES_AVAILABLE:
+                    st.error("Cannot initialize simulation. Required modules are missing.")
+                else:
+                    with st.spinner("Initializing reservoir simulation..."):
+                        st.session_state.simulator = ReservoirSimulator(
+                            nx=int(nx), ny=int(ny), nz=int(nz),
+                            length_x=length_x, length_y=length_y, length_z=length_z,
+                            porosity=porosity,
+                            permeability_x=permeability_x,
+                            permeability_y=permeability_y,
+                            permeability_z=permeability_z,
+                            initial_pressure=initial_pressure,
+                            initial_oil_saturation=oil_saturation,
+                            initial_water_saturation=water_saturation
+                        )
+                        
+                        # Add wells
+                        st.session_state.simulator.add_wells(
+                            num_producers=num_producers,
+                            num_injectors=num_injectors,
+                            production_rate=production_rate,
+                            injection_rate=injection_rate
+                        )
+                        
+                        st.success("Simulation initialized successfully!")
         
         # Main content area
         if st.session_state.simulator is None:
@@ -317,39 +354,85 @@ def main():
                         st.write("---")
     
     with tab2:
-        st.header("🧠 Simulation Assistant")
-        st.markdown("Ask questions about the reservoir simulation or the app's functionality.")
+        st.header("🧠 AI Assistant")
+        st.markdown("Ask questions about reservoir simulation, petroleum engineering, or this app's functionality.")
+        
+        # Display Cohere connection status
+        if st.session_state.cohere_client:
+            st.success("✅ Cohere AI is connected and ready!")
+        else:
+            st.error("❌ Cohere AI is not connected. Please check your API key.")
+            st.info("💡 **How to fix:** Add your Cohere API key to Streamlit secrets or environment variables with key 'COHERE_API_KEY'")
         
         # Chat interface
-        user_input = st.text_area("Your question:", height=100)
-        summarize_option = st.checkbox("Summarize response (using summarize-xlarge model)")
+        with st.container():
+            user_input = st.text_area("Your question:", 
+                                    placeholder="e.g., What is the difference between oil and water saturation?",
+                                    height=100)
+            
+            col1, col2 = st.columns([1, 1])
+            
+            with col1:
+                ask_button = st.button("🤖 Ask Assistant", type="primary", disabled=not st.session_state.cohere_client)
+            
+            with col2:
+                summarize_option = st.checkbox("📝 Summarize response", 
+                                             help="Use Cohere's summarize model to condense the response")
         
-        if st.button("Submit"):
-            if user_input:
-                with st.spinner("Generating response..."):
-                    # Store user input in history
-                    st.session_state.assistant_history.append({"role": "user", "message": user_input})
-                    
-                    # Get response from Cohere
-                    if summarize_option:
-                        # For summarization, pass the user input to summarize-xlarge
-                        response = summarize_text(user_input)
-                    else:
-                        # For general Q&A, use the command model with app context
-                        response = get_assistant_response(user_input)
-                    
-                    # Store assistant response in history
-                    st.session_state.assistant_history.append({"role": "assistant", "message": response})
+        if ask_button and user_input:
+            with st.spinner("🤔 Thinking..."):
+                # Store user input in history
+                st.session_state.assistant_history.append({"role": "user", "message": user_input})
+                
+                # Get response from Cohere
+                if summarize_option:
+                    response = summarize_text(st.session_state.cohere_client, user_input)
+                else:
+                    response = get_assistant_response(st.session_state.cohere_client, user_input)
+                
+                # Store assistant response in history
+                st.session_state.assistant_history.append({"role": "assistant", "message": response})
         
         # Display chat history
         if st.session_state.assistant_history:
-            st.subheader("Conversation History")
-            for chat in st.session_state.assistant_history:
+            st.subheader("💬 Conversation History")
+            
+            # Reverse order to show latest first
+            for i, chat in enumerate(reversed(st.session_state.assistant_history)):
                 if chat["role"] == "user":
-                    st.markdown(f"**You:** {chat['message']}")
+                    with st.chat_message("user"):
+                        st.write(chat['message'])
                 else:
-                    st.markdown(f"**Assistant:** {chat['message']}")
-                st.markdown("---")
+                    with st.chat_message("assistant"):
+                        st.write(chat['message'])
+            
+            # Clear history button
+            if st.button("🗑️ Clear Chat History"):
+                st.session_state.assistant_history = []
+                st.rerun()
+        
+        # Quick questions section
+        st.subheader("💡 Quick Questions")
+        st.markdown("Try asking about these topics:")
+        
+        quick_questions = [
+            "What is reservoir simulation?",
+            "Explain Darcy's law in simple terms",
+            "What's the difference between oil and gas saturation?",
+            "How do production wells work?",
+            "What is porosity and permeability?"
+        ]
+        
+        cols = st.columns(2)
+        for i, question in enumerate(quick_questions):
+            with cols[i % 2]:
+                if st.button(f"❓ {question}", key=f"quick_{i}"):
+                    if st.session_state.cohere_client:
+                        with st.spinner("Getting answer..."):
+                            st.session_state.assistant_history.append({"role": "user", "message": question})
+                            response = get_assistant_response(st.session_state.cohere_client, question)
+                            st.session_state.assistant_history.append({"role": "assistant", "message": response})
+                            st.rerun()
 
 if __name__ == "__main__":
     main()
