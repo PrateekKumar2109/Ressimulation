@@ -37,7 +37,8 @@ def create_interactive_grid(nx, ny, nz, selected_wells=None):
         ),
         name='Available Cells',
         hovertemplate='Grid Cell: (%{x}, %{y})<br>Click to select<extra></extra>',
-        showlegend=True
+        showlegend=True,
+        customdata=[(i, j) for i, j in zip(X.flatten(), Y.flatten())]  # Store grid coordinates
     ))
     
     # Add existing wells
@@ -171,8 +172,45 @@ def main():
         if st.session_state.grid_initialized:
             st.subheader("🎯 Well Placement")
             
+            # Well placement controls for interactive selection
+            st.markdown("**Add Well from Grid Selection**")
+            well_name = st.text_input("Well Name", value=f"WELL_{len(st.session_state.selected_wells)+1}", key="grid_well_name")
+            well_type = st.selectbox("Well Type", ["producer", "injector"], key="grid_well_type")
+            well_z = st.number_input("Z Layer", min_value=0, max_value=int(nz)-1, value=0, key="grid_well_z")
+            
+            if well_type == "producer":
+                well_rate = st.number_input("Production Rate (STB/day)", value=500.0, min_value=0.0, key="grid_prod_rate") * -1
+            else:
+                well_rate = st.number_input("Injection Rate (STB/day)", value=300.0, min_value=0.0, key="grid_inj_rate")
+            
+            if st.session_state.selected_cell:
+                x, y = st.session_state.selected_cell
+                st.info(f"Selected cell: ({x}, {y}, {well_z})")
+                if st.button("➕ Add Well at Selected Cell", type="primary", key="add_grid_well"):
+                    # Check if location is already occupied
+                    occupied = any(well['i'] == x and well['j'] == y and well['k'] == well_z 
+                                 for well in st.session_state.selected_wells)
+                    
+                    if not occupied:
+                        new_well = {
+                            'name': well_name,
+                            'type': well_type,
+                            'i': int(x),
+                            'j': int(y),
+                            'k': int(well_z),
+                            'rate': well_rate,
+                            'radius': 0.1,
+                            'skin': 0.0
+                        }
+                        st.session_state.selected_wells.append(new_well)
+                        st.session_state.selected_cell = None  # Reset selection
+                        st.success(f"Added {well_name} at ({x}, {y}, {well_z})")
+                        st.rerun()
+                    else:
+                        st.error("Location already occupied by another well!")
+            
             # Manual coordinate input as backup
-            with st.expander("Manual Well Placement", expanded=True):
+            with st.expander("Manual Well Placement", expanded=False):
                 col1, col2 = st.columns(2)
                 with col1:
                     manual_x = st.number_input("X Coordinate", min_value=0, max_value=int(nx)-1, value=0, key="manual_x")
@@ -180,32 +218,32 @@ def main():
                 with col2:
                     manual_z = st.number_input("Z Layer", min_value=0, max_value=int(nz)-1, value=0, key="manual_z")
                 
-                well_name = st.text_input("Well Name", value=f"WELL_{len(st.session_state.selected_wells)+1}")
-                well_type = st.selectbox("Well Type", ["producer", "injector"])
+                manual_well_name = st.text_input("Well Name", value=f"WELL_{len(st.session_state.selected_wells)+1}", key="manual_well_name")
+                manual_well_type = st.selectbox("Well Type", ["producer", "injector"], key="manual_well_type")
                 
-                if well_type == "producer":
-                    well_rate = st.number_input("Production Rate (STB/day)", value=500.0, min_value=0.0) * -1
+                if manual_well_type == "producer":
+                    manual_well_rate = st.number_input("Production Rate (STB/day)", value=500.0, min_value=0.0, key="manual_prod_rate") * -1
                 else:
-                    well_rate = st.number_input("Injection Rate (STB/day)", value=300.0, min_value=0.0)
+                    manual_well_rate = st.number_input("Injection Rate (STB/day)", value=300.0, min_value=0.0, key="manual_inj_rate")
                 
-                if st.button("➕ Add Well at Coordinates", type="primary"):
+                if st.button("➕ Add Well at Coordinates", type="primary", key="add_manual_well"):
                     # Check if location is already occupied
                     occupied = any(well['i'] == manual_x and well['j'] == manual_y and well['k'] == manual_z 
                                  for well in st.session_state.selected_wells)
                     
                     if not occupied:
                         new_well = {
-                            'name': well_name,
-                            'type': well_type,
+                            'name': manual_well_name,
+                            'type': manual_well_type,
                             'i': int(manual_x),
                             'j': int(manual_y),
                             'k': int(manual_z),
-                            'rate': well_rate,
+                            'rate': manual_well_rate,
                             'radius': 0.1,
                             'skin': 0.0
                         }
                         st.session_state.selected_wells.append(new_well)
-                        st.success(f"Added {well_name} at ({manual_x}, {manual_y}, {manual_z})")
+                        st.success(f"Added {manual_well_name} at ({manual_x}, {manual_y}, {manual_z})")
                         st.rerun()
                     else:
                         st.error("Location already occupied by another well!")
@@ -311,11 +349,24 @@ def main():
         
         with col1:
             st.subheader("🗺️ Reservoir Grid Layout")
-            st.markdown("**Instructions:** Use the manual well placement controls in the sidebar to add wells to specific grid coordinates.")
+            st.markdown("**Instructions:** Click on a grid cell to select a location, then use the sidebar to specify well details and add it. Alternatively, use the manual well placement controls.")
             
             # Create and display interactive grid
             grid_fig = create_interactive_grid(int(nx), int(ny), int(nz), st.session_state.selected_wells)
-            st.plotly_chart(grid_fig, use_container_width=True, key="reservoir_grid")
+            grid_event = st.plotly_chart(grid_fig, use_container_width=True, key="reservoir_grid")
+            
+            # Handle click events
+            if grid_event:
+                try:
+                    selected_points = grid_event.get('plotly_click')
+                    if selected_points and len(selected_points) > 0:
+                        point = selected_points[0]
+                        if 'customdata' in point:
+                            x, y = point['customdata']
+                            st.session_state.selected_cell = (int(x), int(y))
+                            st.rerun()
+                except Exception as e:
+                    st.warning(f"Error processing grid selection: {str(e)}")
         
         with col2:
             st.markdown("#### 📊 Grid Information")
@@ -343,7 +394,7 @@ def main():
                 st.success("Wells placed! Click **'Initialize Simulation'** in the sidebar to proceed.")
             else:
                 st.markdown("#### 🎯 Next Step")
-                st.warning("Add wells using the sidebar controls, then initialize the simulation.")
+                st.warning("Add wells using the grid or sidebar controls, then initialize the simulation.")
     
     else:
         # Simulation controls and results
