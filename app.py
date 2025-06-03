@@ -13,7 +13,7 @@ def initialize_cohere():
     """Initialize Cohere client with proper error handling"""
     try:
         # Try to get API key from Streamlit secrets first, then environment variables
-        cohere_api_key = "WpqbKuHljLuK7QeZ7Oc7PHR6yo2euueojjjnJJXh"
+        cohere_api_key = "vGCEakgncpouo9Nz0rsJ0Bq7XRvwNgTCZMKSohlg"
         
         if not cohere_api_key:
             st.error("❌ Cohere API key not found. Please set COHERE_API_KEY in Streamlit secrets or environment variables.")
